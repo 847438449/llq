@@ -6,20 +6,23 @@ from app.browser.tools import extract_page_context
 
 
 class BadLocator:
-    def inner_text(self, timeout=5000):
+    async def inner_text(self, timeout=5000):
         raise RuntimeError("cannot read body")
 
 
 class FakePage:
     url = "https://example.com"
 
-    def title(self):
+    async def title(self):
         return "Example"
+
+    async def goto(self, *args, **kwargs):
+        return None
 
     def locator(self, _):
         return BadLocator()
 
-    def evaluate(self, _):
+    async def evaluate(self, _):
         return {"buttons": [], "links": [], "inputs": []}
 
 
