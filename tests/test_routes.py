@@ -44,3 +44,10 @@ def test_debug_mode_response_fields(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["debug"]["matched_skill"] == "generic_web"
+
+
+def test_web_ui_index_route() -> None:
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "AI Browser Agent" in response.text

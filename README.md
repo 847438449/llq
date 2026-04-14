@@ -10,6 +10,7 @@
 - 本地记忆（`artifacts/memory/tasks.json`）
 - 调试追踪（`artifacts/logs/{task_id}.json`）
 - MV3 侧边栏扩展，可采集当前标签页上下文并调用后端
+- 内置 Web UI（`/`），可输入任务并查看时间线执行结果与调试面板
 
 ## 环境要求
 - Python 3.11+
@@ -56,3 +57,7 @@ curl -X POST http://localhost:8000/api/tasks/run \
 
 ## 扩展加载（Chrome/Edge）
 详细步骤见：`extension/README.md`
+
+
+## Web UI
+启动后访问：`http://localhost:8000/`
