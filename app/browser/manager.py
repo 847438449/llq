@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.runtime import configure_windows_event_loop_policy, log_startup_diagnostics
+
+configure_windows_event_loop_policy()
+
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
 
@@ -15,6 +19,8 @@ class BrowserManager:
         self._page: Page | None = None
 
     async def start(self) -> Page:
+        configure_windows_event_loop_policy()
+        log_startup_diagnostics("browser.start")
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(headless=False)
         self._context = await self._browser.new_context()

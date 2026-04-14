@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import asyncio
-import sys
 from pathlib import Path
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+from app.runtime import configure_windows_event_loop_policy, log_startup_diagnostics
+
+configure_windows_event_loop_policy()
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -19,6 +18,11 @@ app.include_router(task_router)
 artifacts_dir = Path("artifacts")
 artifacts_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/artifacts", StaticFiles(directory=str(artifacts_dir)), name="artifacts")
+
+
+@app.on_event("startup")
+async def startup_diagnostics() -> None:
+    log_startup_diagnostics("app.startup")
 
 
 @app.get("/")
