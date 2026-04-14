@@ -45,6 +45,7 @@ class StepDebugTrace(BaseModel):
     validated_action: str
     action_result: str
     failure_reason: str | None = None
+    stop_reason: str | None = None
 
 
 class TaskDebugInfo(BaseModel):
@@ -61,3 +62,4 @@ class TaskRunResponse(BaseModel):
     steps: list[StepResult]
     extracted_data: dict[str, Any] = Field(default_factory=dict)
     debug: TaskDebugInfo | None = None
+    stop_reason: str | None = None
