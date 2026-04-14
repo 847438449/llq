@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,16 @@ configure_windows_event_loop_policy()
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
 
+@dataclass
+class SyncPageWrapper:
+    page: Any
+    executor: ThreadPoolExecutor
+
+    @property
+    def url(self) -> str:
+        return self.page.url
+
+
 class BrowserManager:
     def __init__(self, screenshots_dir: str = "artifacts/screenshots") -> None:
         self.screenshots_dir = Path(screenshots_dir)
@@ -19,19 +31,23 @@ class BrowserManager:
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
-        self._page: Page | Any | None = None
+        self._page: Page | SyncPageWrapper | None = None
 
         self._sync_playwright = None
         self._sync_browser = None
         self._sync_context = None
+        self._sync_executor: ThreadPoolExecutor | None = None
         self._use_sync = sys.platform == "win32"
 
-    async def start(self) -> Page | Any:
+    async def start(self) -> Page | SyncPageWrapper:
         configure_windows_event_loop_policy()
         log_startup_diagnostics("browser.start")
 
         if self._use_sync:
-            await asyncio.to_thread(self._start_sync)
+            self._sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright-sync")
+            loop = asyncio.get_running_loop()
+            sync_page = await loop.run_in_executor(self._sync_executor, self._start_sync)
+            self._page = SyncPageWrapper(page=sync_page, executor=self._sync_executor)
             return self._page
 
         self._playwright = await async_playwright().start()
@@ -40,23 +56,26 @@ class BrowserManager:
         self._page = await self._context.new_page()
         return self._page
 
-    def _start_sync(self) -> None:
+    def _start_sync(self):
         from playwright.sync_api import sync_playwright
 
         self._sync_playwright = sync_playwright().start()
         self._sync_browser = self._sync_playwright.chromium.launch(headless=False)
         self._sync_context = self._sync_browser.new_context()
-        self._page = self._sync_context.new_page()
+        return self._sync_context.new_page()
 
     @property
-    def page(self) -> Page | Any:
+    def page(self) -> Page | SyncPageWrapper:
         if self._page is None:
             raise RuntimeError("Browser has not been started")
         return self._page
 
     async def close(self) -> None:
         if self._use_sync:
-            await asyncio.to_thread(self._close_sync)
+            if self._sync_executor:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(self._sync_executor, self._close_sync)
+                self._sync_executor.shutdown(wait=True, cancel_futures=True)
             return
 
         if self._context:
