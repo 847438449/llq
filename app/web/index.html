@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Browser Agent UI</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f6f7fb; }
+      .container { max-width: 980px; margin: 0 auto; padding: 20px; }
+      .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+      textarea { width: 100%; min-height: 88px; padding: 10px; border-radius: 8px; border: 1px solid #d7dbe6; }
+      button { margin-top: 10px; padding: 10px 14px; border: 0; border-radius: 8px; background: #2f6fed; color: white; cursor: pointer; }
+      button:disabled { opacity: .6; cursor: default; }
+      .row { display: flex; gap: 12px; align-items: center; }
+      .timeline { border-left: 3px solid #dfe5f5; margin-left: 10px; padding-left: 14px; }
+      .step { position: relative; margin-bottom: 12px; background: #fafbff; border: 1px solid #e3e8f5; border-radius: 10px; padding: 10px; }
+      .step::before { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 999px; background: #2f6fed; left: -21px; top: 14px; }
+      .meta { color: #5a6175; font-size: 13px; }
+      .loading { color: #2f6fed; font-size: 13px; }
+      img.preview { max-width: 100%; border: 1px solid #e1e6f5; border-radius: 8px; margin-top: 8px; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #f8f9fe; border: 1px solid #e2e7f7; padding: 10px; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <h2>AI Browser Agent</h2>
+        <textarea id="taskInput" placeholder="e.g. Open example.com and summarize the main content"></textarea>
+        <div class="row">
+          <label><input type="checkbox" id="debugToggle" checked /> Debug mode</label>
+          <button id="runBtn">Run</button>
+          <span id="loadingText" class="loading"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Execution Timeline</h3>
+        <div id="timeline" class="timeline"></div>
+      </div>
+
+      <div class="card">
+        <h3>Debug Panel</h3>
+        <pre id="debugPanel">No debug data yet.</pre>
+      </div>
+    </div>
+
+    <script>
+      const taskInput = document.getElementById('taskInput');
+      const debugToggle = document.getElementById('debugToggle');
+      const runBtn = document.getElementById('runBtn');
+      const loadingText = document.getElementById('loadingText');
+      const timeline = document.getElementById('timeline');
+      const debugPanel = document.getElementById('debugPanel');
+
+      function screenshotToUrl(path) {
+        if (!path) return null;
+        if (path.startsWith('http://') || path.startsWith('https://')) return path;
+        return '/' + path.replace(/^\/+/, '');
+      }
+
+      function addStepCard(step, trace, matchedSkill) {
+        const el = document.createElement('div');
+        el.className = 'step';
+        const resultSummary = step.error ? `Error: ${step.error}` : JSON.stringify(step.data || {});
+        const screenshotUrl = screenshotToUrl(step.screenshot);
+        el.innerHTML = `
+          <div><strong>Step ${step.step}</strong> - ${step.action} ${step.success ? '✅' : '❌'}</div>
+          <div class="meta">URL: ${step.url || '-'}</div>
+          <div class="meta">Skill: ${(trace && trace.matched_skill) || matchedSkill || '-'}</div>
+          <div class="meta">Result: ${resultSummary}</div>
+          ${screenshotUrl ? `<img class="preview" src="${screenshotUrl}" alt="screenshot step ${step.step}" />` : ''}
+        `;
+        timeline.appendChild(el);
+        el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+
+      async function runTask() {
+        const task = taskInput.value.trim();
+        if (!task) {
+          alert('Please enter a task.');
+          return;
+        }
+
+        runBtn.disabled = true;
+        loadingText.textContent = 'Running...';
+        timeline.innerHTML = '';
+        debugPanel.textContent = 'Waiting for response...';
+
+        try {
+          const resp = await fetch('/api/tasks/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task, debug: !!debugToggle.checked })
+          });
+          const data = await resp.json();
+
+          if (!resp.ok) {
+            throw new Error(data.detail || 'Request failed');
+          }
+
+          const steps = data.steps || [];
+          const traces = data.debug?.step_traces || [];
+          const matchedSkill = data.debug?.matched_skill || '-';
+
+          let i = 0;
+          loadingText.textContent = steps.length ? 'Rendering timeline...' : 'No steps returned.';
+          const timer = setInterval(() => {
+            if (i >= steps.length) {
+              clearInterval(timer);
+              loadingText.textContent = 'Done.';
+              return;
+            }
+            addStepCard(steps[i], traces[i], matchedSkill);
+            i += 1;
+          }, 350);
+
+          if (debugToggle.checked) {
+            debugPanel.textContent = JSON.stringify({
+              matched_skill: matchedSkill,
+              past_experience_used: data.debug?.past_experience_used || '',
+              planner_reasoning_summary: data.debug?.planner_reasoning_summary || '',
+              step_traces: traces.map(t => ({
+                step: t.step,
+                planner_input_summary: t.planner_input_summary,
+                planner_output: t.planner_raw_output,
+                validated_action: t.validated_action,
+                action_result: t.action_result
+              }))
+            }, null, 2);
+          } else {
+            debugPanel.textContent = 'Debug mode disabled.';
+          }
+        } catch (err) {
+          loadingText.textContent = 'Failed.';
+          debugPanel.textContent = String(err);
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener('click', runTask);
+    </script>
+  </body>
+</html>
