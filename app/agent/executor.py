@@ -134,8 +134,7 @@ class TaskExecutor:
                     if failure_counts[step_key] >= 2:
                         results.append(result)
                         screenshot_path = manager.screenshots_dir / f"step_{idx}_{step.action}.png"
-                        await take_screenshot(page, screenshot_path)
-                        result.screenshot = str(screenshot_path)
+                        await self._safe_take_screenshot(page, screenshot_path, result)
                         history.append(self._history_entry(step, result))
                         if debug:
                             debug_traces.append(
@@ -154,8 +153,7 @@ class TaskExecutor:
                 finally:
                     if result.screenshot is None:
                         screenshot_path = manager.screenshots_dir / f"step_{idx}_{step.action}.png"
-                        await take_screenshot(page, screenshot_path)
-                        result.screenshot = str(screenshot_path)
+                        await self._safe_take_screenshot(page, screenshot_path, result)
 
                 results.append(result)
                 history.append(self._history_entry(step, result))
@@ -216,6 +214,15 @@ class TaskExecutor:
             extracted_data=extracted_data,
             debug=debug_info,
         )
+
+
+    async def _safe_take_screenshot(self, page, screenshot_path: Path, result: StepResult) -> None:
+        try:
+            await take_screenshot(page, screenshot_path)
+            result.screenshot = str(screenshot_path)
+        except Exception as screenshot_exc:
+            msg = f"screenshot_failed: {screenshot_exc}"
+            result.error = f"{result.error}; {msg}" if result.error else msg
 
     async def _execute_action(self, page, step: PlannedStep, manager: BrowserManager, idx: int) -> dict:
         if step.action == "open_url":

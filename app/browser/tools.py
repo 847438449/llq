@@ -156,7 +156,13 @@ async def extract_page_context(page: Page | SyncPageWrapper) -> dict:
 async def take_screenshot(page: Page | SyncPageWrapper, path: Path) -> dict:
     path.parent.mkdir(parents=True, exist_ok=True)
     if _is_async_page(page):
-        await page.screenshot(path=str(path), full_page=True)
+        try:
+            await page.screenshot(path=str(path), full_page=True, timeout=15000)
+        except Exception:
+            await page.screenshot(path=str(path), full_page=False, timeout=5000)
     else:
-        await _run_sync_page(page, lambda: page.page.screenshot(path=str(path), full_page=True))
+        try:
+            await _run_sync_page(page, lambda: page.page.screenshot(path=str(path), full_page=True, timeout=15000))
+        except Exception:
+            await _run_sync_page(page, lambda: page.page.screenshot(path=str(path), full_page=False, timeout=5000))
     return {"path": str(path)}
